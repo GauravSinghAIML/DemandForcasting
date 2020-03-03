@@ -26,7 +26,7 @@ import xgboost as xgb
 from xgboost import plot_importance, plot_tree
 from sklearn.metrics import mean_squared_error, mean_absolute_error
 plt.style.use('fivethirtyeight')
-
+import pickle
 
 import warnings
 import numpy as np
@@ -84,7 +84,7 @@ def XGBoostModel(X_train, y_train,X_test, y_test):
     return reg
 
 def MLPModel(X_train, y_train,X_test, y_test):
-    epochs = 100
+    epochs = 200
     batch = 128
     lr = 0.0003
     adam = optimizers.Adam(lr)
@@ -99,7 +99,7 @@ def MLPModel(X_train, y_train,X_test, y_test):
     return model_mlp
 
 def CNNLSTMModel(X_train_series, Y_train,X_valid_series, Y_valid):
-    epochs = 100
+    epochs = 200
     batch = 128
     lr = 0.0003
     adam = optimizers.Adam(lr)
@@ -120,29 +120,43 @@ def CNNLSTMModel(X_train_series, Y_train,X_valid_series, Y_valid):
     cnn_lstm_history = model_cnn_lstm.fit(X_train_series_sub, Y_train, validation_data=(X_valid_series_sub, Y_valid), epochs=epochs, verbose=2)
     return model_cnn_lstm
 
-def XGBoostPrediction(model, X_test,demandForcastingData_test,demandForcastingData_train ):
-    demandForcastingData_test['Count_Prediction1'] = model.predict(X_test)
-    demandForcastingData_all = pd.concat([demandForcastingData_test, demandForcastingData_train], sort=False)
+def XGBoostPrediction(model,train, X_test,demandForcastingData_test,demandForcastingData_train ):
+    if not train:
+        demandForcastingData_test['Count_Prediction1'] = model.predict(X_test)
+        demandForcastingData_all = pd.concat([demandForcastingData_test, demandForcastingData_train], sort=False)
+        return demandForcastingData_test
+    else:
+        demandForcastingData_train['Count_Prediction1'] = model.predict(X_test)
+        demandForcastingData_all = pd.concat([demandForcastingData_train, demandForcastingData_train], sort=False)
+        return demandForcastingData_train
 
     #_ = demandForcastingData_all[['Count','Count_Prediction']].plot(figsize=(15, 5))
-    return demandForcastingData_test
+    
 
-def MLPPrediction(model, X_test,demandForcastingData_test,demandForcastingData_train ):
-    demandForcastingData_test['Count_Prediction2'] = model.predict(X_test)
-    demandForcastingData_all = pd.concat([demandForcastingData_test, demandForcastingData_train], sort=False)
-
-    #_ = demandForcastingData_all[['Count','Count_Prediction']].plot(figsize=(15, 5))
-    return demandForcastingData_test
-def LSTMCNNPrediction(model, X_test,demandForcastingData_test,demandForcastingData_train ):
+def MLPPrediction(model,train, X_test,demandForcastingData_test,demandForcastingData_train ):
+    if not train:
+        demandForcastingData_test['Count_Prediction2'] = model.predict(X_test)
+        demandForcastingData_all = pd.concat([demandForcastingData_test, demandForcastingData_train], sort=False)
+        return demandForcastingData_test
+    else:
+        demandForcastingData_train['Count_Prediction2'] = model.predict(X_test)
+        demandForcastingData_all = pd.concat([demandForcastingData_train, demandForcastingData_train], sort=False)
+        return demandForcastingData_train
+def LSTMCNNPrediction(model,train, X_test,demandForcastingData_test,demandForcastingData_train ):
     X_test_series = X_test.values.reshape((X_test.shape[0], X_test.shape[1], 1))
     subsequences = 2
     timesteps = X_test_series.shape[1]//subsequences
     X_test_series_sub = X_test_series.reshape((X_test_series.shape[0], subsequences, timesteps, 1))
-    demandForcastingData_test['Count_Prediction3'] = model.predict(X_test_series_sub)
-    demandForcastingData_all = pd.concat([demandForcastingData_test, demandForcastingData_train], sort=False)
-    #print(demandForcastingData_test['Count_Prediction'])
-    #_ = demandForcastingData_all[['Count','Count_Prediction']].plot(figsize=(15, 5))
-    return demandForcastingData_test
+    #demandForcastingData_test['Count_Prediction3'] = model.predict(X_test_series_sub)
+    #demandForcastingData_all = pd.concat([demandForcastingData_test, demandForcastingData_train], sort=False)
+    if not train:
+        demandForcastingData_test['Count_Prediction3'] = model.predict(X_test_series_sub)
+        demandForcastingData_all = pd.concat([demandForcastingData_test, demandForcastingData_train], sort=False)
+        return demandForcastingData_test
+    else:
+        demandForcastingData_train['Count_Prediction3'] = model.predict(X_test_series_sub)
+        demandForcastingData_all = pd.concat([demandForcastingData_train, demandForcastingData_train], sort=False)
+        return demandForcastingData_train
 
 
 def modelEvaluation(y_test, y_pred):    
@@ -160,7 +174,7 @@ def modelEvaluation(y_test, y_pred):
         accuracy = 100*result_dict[True]/(result_dict[True])
     print('accuracy: %.2f %%'% (accuracy))
 
-def prophetModelandPrediction(demandForcastingData_train,demandForcastingData_test,holiday_df):
+def prophetModelandPrediction(train,demandForcastingData_train,demandForcastingData_test,holiday_df):
     cal = calendar()
     #train_holidays = cal.holidays(start=demandForcastingData_train.index.min(),end=demandForcastingData_train.index.max())
     #test_holidays = cal.holidays(start=demandForcastingData_test.index.min(),end=demandForcastingData_test.index.max())
@@ -168,13 +182,20 @@ def prophetModelandPrediction(demandForcastingData_train,demandForcastingData_te
     demandForcastingData_train.reset_index().rename(columns={'ArrivalDate':'ds','Count':'y'}).head()
     model = Prophet(holidays=holiday_df)
     model.fit(demandForcastingData_train.reset_index().rename(columns={'ArrivalDate':'ds','Count':'y'}))
-    demandForcastingData_test_fcst = model.predict(df=demandForcastingData_test.reset_index().rename(columns={'ArrivalDate':'ds'}))
-    demandForcastingData_test['Count_Prediction4'] = demandForcastingData_test_fcst.yhat.values
-    #print(predProphet)
-    return demandForcastingData_test
+    #demandForcastingData_test_fcst = model.predict(df=demandForcastingData_train.reset_index().rename(columns={'ArrivalDate':'ds'}))
+    #demandForcastingData_test['Count_Prediction4'] = demandForcastingData_test_fcst.yhat.values
+    if not train:
+        demandForcastingData_test_fcst = model.predict(df=demandForcastingData_test.reset_index().rename(columns={'ArrivalDate':'ds'}))
+        demandForcastingData_test['Count_Prediction4'] = demandForcastingData_test_fcst.yhat.values
+        return demandForcastingData_test
+    else:
+        demandForcastingData_test_fcst = model.predict(df=demandForcastingData_train.reset_index().rename(columns={'ArrivalDate':'ds'}))
+        #print(demandForcastingData_test_fcst)
+        demandForcastingData_train['Count_Prediction4'] = demandForcastingData_test_fcst.yhat.values
+        return demandForcastingData_train
     
 
-def prophetMethod(demandForcastingData,demandForcastingData_train,demandForcastingData_test):
+def prophetMethod(train,demandForcastingData,demandForcastingData_train,demandForcastingData_test):
     cal = calendar()
     demandForcastingData['date'] = demandForcastingData.index.date
     demandForcastingData['is_holiday'] = demandForcastingData.date.isin([d.date() for d in cal.holidays()])
@@ -183,34 +204,56 @@ def prophetMethod(demandForcastingData,demandForcastingData_train,demandForcasti
     holiday_df = holiday_df.drop(['Count','date','is_holiday'], axis=1)
     holiday_df['ds'] = pd.to_datetime(holiday_df['ds'])
     
-    demandForcastingData_test=prophetModelandPrediction(demandForcastingData_train,demandForcastingData_test,holiday_df)
+    demandForcastingData_test=prophetModelandPrediction(train,demandForcastingData_train,demandForcastingData_test,holiday_df)
     #modelEvaluation(y_test=demandForcastingData_test['Count'],y_pred=demandForcastingData_test['Count_Prediction'])
     return demandForcastingData_test
 
-def xgboostMethod(X_train, y_train,X_test, y_test,demandForcastingData_train,demandForcastingData_test):
-    model=XGBoostModel(X_train, y_train,X_test, y_test)
-    demandForcastingData_test=XGBoostPrediction(model, X_test,demandForcastingData_test,demandForcastingData_train )
-    #modelEvaluation(y_test=demandForcastingData_test['Count'],y_pred=demandForcastingData_test['Count_Prediction'])
-    return demandForcastingData_test
+def xgboostMethod(train,X_train, y_train,X_test, y_test,demandForcastingData_train,demandForcastingData_test):
+    if train:
+        model=XGBoostModel(X_train, y_train,X_test, y_test)
+        demandForcastingData_test=XGBoostPrediction(model,train, X_train,demandForcastingData_test,demandForcastingData_train )
+        #modelEvaluation(y_test=demandForcastingData_test['Count'],y_pred=demandForcastingData_test['Count_Prediction'])
+        pickle.dump(model, open("D:/Practice/Model/dfmodel1.pickle.dat", "wb"))
+        return demandForcastingData_test
+    else:
+        loaded_model = pickle.load(open("D:/Practice/Model/dfmodel1.pickle.dat", "rb"))
+        demandForcastingData_test=XGBoostPrediction(loaded_model,train, X_train,demandForcastingData_test,demandForcastingData_train )
+        #modelEvaluation(y_test=demandForcastingData_test['Count'],y_pred=demandForcastingData_test['Count_Prediction'])
+        return demandForcastingData_test
+    
 
-def MLPMethod(X_train, y_train,X_test, y_test,demandForcastingData_train,demandForcastingData_test):
-    model=MLPModel(X_train, y_train,X_test, y_test)
-    demandForcastingData_test=MLPPrediction(model, X_test,demandForcastingData_test,demandForcastingData_train )
-    #modelEvaluation(y_test=demandForcastingData_test['Count'],y_pred=demandForcastingData_test['Count_Prediction'])
-    return demandForcastingData_test
+def MLPMethod(train,X_train, y_train,X_test, y_test,demandForcastingData_train,demandForcastingData_test):
+    if train:
+        model=MLPModel(X_train, y_train,X_test, y_test)
+        demandForcastingData_test=MLPPrediction(model,train, X_train,demandForcastingData_test,demandForcastingData_train )
+        #modelEvaluation(y_test=demandForcastingData_test['Count'],y_pred=demandForcastingData_test['Count_Prediction'])
+        pickle.dump(model, open("D:/Practice/Model/dfmodel2.pickle.dat", "wb"))
+        return demandForcastingData_test
+    else:
+        loaded_model = pickle.load(open("D:/Practice/Model/dfmodel2.pickle.dat", "rb"))
+        demandForcastingData_test=MLPPrediction(loaded_model,train, X_train,demandForcastingData_test,demandForcastingData_train )
+        #modelEvaluation(y_test=demandForcastingData_test['Count'],y_pred=demandForcastingData_test['Count_Prediction'])
+        return demandForcastingData_test
+    
 
-def CNNLSTMMethod(X_train, y_train,X_test, y_test,demandForcastingData_train,demandForcastingData_test):
+def CNNLSTMMethod(train,X_train, y_train,X_test, y_test,demandForcastingData_train,demandForcastingData_test):
     X_train_series = X_train.values.reshape((X_train.shape[0], X_train.shape[1], 1))
     X_test_series = X_test.values.reshape((X_test.shape[0], X_test.shape[1], 1))
     print('Train set shape', X_train_series.shape)
     print('Validation set shape', X_test_series.shape)
+    if train:
+        modelDL= CNNLSTMModel(X_train_series, y_train,X_test_series, y_test)
+        demandForcastingData_test=LSTMCNNPrediction(modelDL,train, X_train,demandForcastingData_test,demandForcastingData_train )
+        #modelEvaluation(y_test=demandForcastingData_test['Count'],y_pred=demandForcastingData_test['Count_Prediction'])
+        pickle.dump(modelDL, open("D:/Practice/Model/dfmodel3.pickle.dat", "wb"))
+        return demandForcastingData_test
+    else:
+        loaded_model = pickle.load(open("D:/Practice/Model/dfmodel3.pickle.dat", "rb"))
+        demandForcastingData_test=LSTMCNNPrediction(loaded_model,train, X_train,demandForcastingData_test,demandForcastingData_train )
+        #modelEvaluation(y_test=demandForcastingData_test['Count'],y_pred=demandForcastingData_test['Count_Prediction'])
+        return demandForcastingData_test    
 
-    modelDL= CNNLSTMModel(X_train_series, y_train,X_test_series, y_test)
-    demandForcastingData_test=LSTMCNNPrediction(modelDL, X_test,demandForcastingData_test,demandForcastingData_train )
-    #modelEvaluation(y_test=demandForcastingData_test['Count'],y_pred=demandForcastingData_test['Count_Prediction'])
-    return demandForcastingData_test
-
-# Make predictions with sub-models and construct a new stacked row
+'''# Make predictions with sub-models and construct a new stacked row
 def to_stacked_row(models, predict_list, row):
 	stacked_row = list()
 	for i in range(len(models)):
@@ -239,7 +282,22 @@ def stacking(train, test):
 		prediction = logistic_regression_predict(stacked_model, stacked_row)
 		prediction = round(prediction)
 		predictions.append(prediction)
-	return predictions
+	return predictions'''
+def modelsStack(train,X_train, y_train,X_test, y_test,demandForcastingData_train,demandForcastingData_test,demandForcastingData):
+    #Model 1: XGBoost
+    modelXGB=xgboostMethod(train,X_train, y_train,X_test, y_test,demandForcastingData_train,demandForcastingData_test)
+    
+    #Model 2: MLP
+    modelMLP=MLPMethod(train,X_train, y_train,X_test, y_test, demandForcastingData_train,demandForcastingData_test)
+    
+    #Model 3: CNNLSTM
+    modelCNNLSTM=CNNLSTMMethod(train,X_train, y_train,X_test, y_test,demandForcastingData_train,demandForcastingData_test)
+    
+    #Model 4: ProphetModel
+    modelPRO=prophetMethod(train,demandForcastingData,demandForcastingData_train,demandForcastingData_test)
+    #print(modelXGB)
+    stackedOutModel = np.column_stack((modelXGB['Count_Prediction1'], modelMLP['Count_Prediction2'],modelCNNLSTM['Count_Prediction3'], modelPRO['Count_Prediction4']))
+    return stackedOutModel
 def main():
     demandForcastingData = pd.read_csv('D:/Practice/AmericasBestValue.csv', index_col=[0], parse_dates=[0])
 
@@ -265,31 +323,20 @@ def main():
     ax.set_xbound(lower='2019-11-01', upper='2019-12-31')
     ax.set_ylim(0, 60)
     plot = plt.suptitle('January 2020 Forecast vs Actuals')'''
-    #Model 1: XGBoost
-    modelXGB=xgboostMethod(X_train, y_train,X_test, y_test,demandForcastingData_train,demandForcastingData_test)
-    
-    #Model 2: MLP
-    modelMLP=MLPMethod(X_train, y_train,X_test, y_test,demandForcastingData_train,demandForcastingData_test)
-    
-    #Model 3: CNNLSTM
-    modelCNNLSTM=CNNLSTMMethod(X_train, y_train,X_test, y_test,demandForcastingData_train,demandForcastingData_test)
-    
-    #Model 4: ProphetModel
-    modelPRO=prophetMethod(demandForcastingData,demandForcastingData_train,demandForcastingData_test)
-    #print(modelXGB)
-    #n_folds = 3
-    #scores = evaluate_algorithm(dataset, stacking, n_folds)
-    stackedOutModel = np.column_stack((modelXGB['Count_Prediction1'], modelMLP['Count_Prediction2'],modelCNNLSTM['Count_Prediction3'], modelPRO['Count_Prediction4']))
-    print(stackedOutModel)
+    train = True
+    stackedOutModel = modelsStack(train,X_train, y_train,X_test, y_test,demandForcastingData_train,demandForcastingData_test,demandForcastingData)
+    train = False
+    stackedOutModelXtest = modelsStack(train,X_test, y_test,X_test, y_test,demandForcastingData_train,demandForcastingData_test,demandForcastingData)
+    #print(stackedOutModel)
     #regressor = LinearRegression()
     #regressor.fit(stackedOutModel, y_test)
     #-----
-    xgbreg = xgb.XGBRegressor(n_estimators=100)
-    xgbreg.fit(stackedOutModel, y_test,
-            eval_set=[(stackedOutModel, y_test), (stackedOutModel, y_test)],
+    xgbreg = xgb.XGBRegressor(n_estimators=1000)
+    xgbreg.fit(stackedOutModel, y_train,
+            eval_set=[(stackedOutModel, y_train), (stackedOutModelXtest, y_test)],
             early_stopping_rounds=50,
            verbose=True)
-    demandForcastingData_test['Count_PredictionFinal'] = xgbreg.predict(stackedOutModel)
+    demandForcastingData_test['Count_PredictionFinal'] = xgbreg.predict(stackedOutModelXtest)
     modelEvaluation(y_test=demandForcastingData_test['Count'],y_pred=demandForcastingData_test['Count_PredictionFinal'])
     #-----
     #print(demandForcastingData_test['Count'])
